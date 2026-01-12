@@ -2,6 +2,7 @@ package com.sakury.service;
 
 import java.util.List;
 
+import com.sakury.entity.dto.UserInfoTokenDto;
 import com.sakury.entity.query.UserInfoQuery;
 import com.sakury.entity.po.UserInfo;
 import com.sakury.entity.vo.PaginationResultVO;
@@ -109,4 +110,9 @@ public interface UserInfoService {
      * 用户注册
      */
     void register(String email, String nickName, String registerPassword);
+
+    /**
+     * 用户登录
+     */
+    UserInfoTokenDto login(String email, String password, String ip);
 }

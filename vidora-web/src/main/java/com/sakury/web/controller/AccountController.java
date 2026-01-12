@@ -6,11 +6,13 @@ import java.util.Map;
 
 import com.sakury.component.RedisComponent;
 import com.sakury.entity.constants.Constants;
+import com.sakury.entity.dto.UserInfoTokenDto;
 import com.sakury.entity.query.UserInfoQuery;
 import com.sakury.entity.po.UserInfo;
 import com.sakury.entity.vo.ResponseVO;
 import com.sakury.exception.BusinessException;
 import com.sakury.service.UserInfoService;
+import com.sakury.utils.StringTools;
 import com.wf.captcha.ArithmeticCaptcha;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -18,6 +20,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import javax.annotation.Resource;
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 import javax.validation.constraints.Email;
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.Pattern;
@@ -92,6 +97,79 @@ public class AccountController extends ABaseController {
         }
     }
 
+    /**
+     * 用户登录接口
+     * 处理用户登录请求，验证验证码、邮箱密码，并生成登录令牌
+     *
+     * @param request      HTTP请求对象，用于获取客户端信息和cookie
+     * @param response     HTTP响应对象，用于设置登录token到cookie
+     * @param email        用户邮箱地址，不能为空且格式必须正确
+     * @param password     用户登录密码，不能为空
+     * @param checkCode    用户输入的图片验证码，不能为空
+     * @param checkCodeKey 图片验证码的唯一标识key，不能为空
+     * @return ResponseVO 包含登录成功信息的响应对象
+     */
+    @RequestMapping("/login")
+    public ResponseVO login(HttpServletRequest request,
+                            HttpServletResponse response,
+                            @NotEmpty @Email String email,
+                            @NotEmpty String password,
+                            @NotEmpty String checkCode,
+                            @NotEmpty String checkCodeKey) {
+        // 验证图片验证码是否正确
+        try {
+            if (!checkCode.equalsIgnoreCase(redisComponent.getCheckCode(checkCodeKey))) {
+                throw new BusinessException("图片验证码错误");
+            }
+            String ip = getIpAddress();
+            // 先清理旧的token（如果存在）
+            clearOldToken(request);
+            UserInfoTokenDto userInfoTokenDto = userInfoService.login(email, password, ip);
+            saveToken2Cookie(response, userInfoTokenDto.getToken());
+            //TODO 设置粉丝数，关注数，硬币数
+            return getSuccessResponseVO(userInfoTokenDto);
+        } finally {
+            // 清理验证码缓存并删除旧的token信息
+            redisComponent.deleteCheckCode(checkCodeKey);
+        }
+    }
+
+    /**
+     * 自动登录接口
+     * 根据用户信息token进行自动登录处理，如果token即将过期则重新保存到redis并更新cookie
+     *
+     * @param response HttpServletResponse对象，用于向客户端设置cookie
+     * @return ResponseVO 返回用户信息token数据的响应对象
+     */
+    @RequestMapping("/autoLogin")
+    public ResponseVO autoLogin(HttpServletResponse response) {
+        // 获取用户信息token对象
+        UserInfoTokenDto userInfoTokenDto = getUserInfoTokenDto();
+        if (userInfoTokenDto == null) {
+            return getSuccessResponseVO(null);
+        }
+        // 检查token是否即将过期（剩余时间小于一天），如果是则重新保存到redis并更新cookie
+        if (userInfoTokenDto.getExpireTime() - System.currentTimeMillis() < Constants.REDIS_KEY_EXPIRES_ONE_DAY) {
+            redisComponent.saveTokenInfo(userInfoTokenDto);
+            saveToken2Cookie(response, userInfoTokenDto.getToken());
+        }
+        // 更新cookie中的token信息
+        saveToken2Cookie(response, userInfoTokenDto.getToken());
+        return getSuccessResponseVO(userInfoTokenDto);
+    }
+
+    /**
+     * 用户登出接口
+     * 处理用户的登出请求，删除相关cookie并返回成功响应
+     *
+     * @param response HTTP响应对象，用于删除cookie
+     * @return ResponseVO 响应结果对象，包含登出操作的结果信息
+     */
+    @RequestMapping("/logout")
+    public ResponseVO logout(HttpServletResponse response) {
+        deleteCookie(response);
+        return getSuccessResponseVO(null);
+    }
 
     /**
      * 根据条件分页查询

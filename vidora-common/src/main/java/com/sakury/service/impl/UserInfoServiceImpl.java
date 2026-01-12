@@ -5,10 +5,13 @@ import java.util.List;
 
 import javax.annotation.Resource;
 
+import com.sakury.component.RedisComponent;
 import com.sakury.entity.constants.Constants;
+import com.sakury.entity.dto.UserInfoTokenDto;
 import com.sakury.entity.enums.UserSexEnum;
 import com.sakury.entity.enums.UserStatusEnum;
 import com.sakury.exception.BusinessException;
+import com.sakury.utils.CopyTools;
 import org.springframework.stereotype.Service;
 
 import com.sakury.entity.enums.PageSize;
@@ -29,6 +32,9 @@ public class UserInfoServiceImpl implements UserInfoService {
 
     @Resource
     private UserInfoMapper<UserInfo, UserInfoQuery> userInfoMapper;
+
+    @Resource
+    private RedisComponent redisComponent;
 
     /**
      * 用户注册功能
@@ -66,6 +72,39 @@ public class UserInfoServiceImpl implements UserInfoService {
         userInfo.setCurrentCoinCount(Constants.ZERO);
         // 将新用户信息插入数据库
         this.userInfoMapper.insert(userInfo);
+    }
+
+    /**
+     * 用户登录方法
+     * 验证用户邮箱和密码，更新登录信息，并生成用户令牌
+     *
+     * @param email    用户邮箱地址
+     * @param password 用户密码
+     * @param ip       用户登录IP地址
+     * @return 包含用户信息的令牌DTO对象
+     * @throws BusinessException 当账号密码错误或用户被禁用时抛出异常
+     */
+    @Override
+    public UserInfoTokenDto login(String email, String password, String ip) {
+        // 查询用户信息并验证账号密码
+        UserInfo userInfo = this.userInfoMapper.selectByEmail(email);
+        if (null == userInfo || !userInfo.getPassword().equals(password)) {
+            throw new BusinessException("账号或密码错误");
+        }
+        // 检查用户状态是否被禁用
+        if (UserStatusEnum.DISABLE.getStatus().equals(userInfo.getStatus())) {
+            throw new BusinessException("用户已被禁用");
+        }
+        // 更新用户的最后登录时间和IP地址
+        UserInfo updateInfo = new UserInfo();
+        updateInfo.setLastLoginTime(new Date());
+        updateInfo.setLastLoginIp(ip);
+        this.userInfoMapper.updateByUserId(updateInfo, userInfo.getUserId());
+
+        // 复制用户信息到令牌DTO并保存到Redis
+        UserInfoTokenDto userInfoTokenDto = CopyTools.copy(userInfo, UserInfoTokenDto.class);
+        redisComponent.saveTokenInfo(userInfoTokenDto);
+        return userInfoTokenDto;
     }
 
 

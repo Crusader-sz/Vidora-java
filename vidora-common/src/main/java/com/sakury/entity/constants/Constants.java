@@ -28,6 +28,15 @@ public class Constants {
     public static final Integer REDIS_KEY_EXPIRES_ONE_MIN = 60000;
 
     /**
+     * Redis键过期时间常量：1天（单位：毫秒）
+     */
+    public static final Integer REDIS_KEY_EXPIRES_ONE_DAY = 86400000;
+
+    /**
+     * 时间常量：1天（单位：秒）
+     */
+    public static final Integer TIME_SECOND_DAY = 86400;
+    /**
      * Redis键前缀常量
      */
     public static final String REDIS_KEY_PREFIX = "vidora:";
@@ -37,4 +46,13 @@ public class Constants {
      */
     public static String REDIS_KEY_CHECK_CODE = REDIS_KEY_PREFIX + "checkCode:";
 
+    /**
+     * Redis信息键前缀
+     */
+    public static String REDIS_KEY_TOKEN_WEB = REDIS_KEY_PREFIX + "token:web:";
+
+    /**
+     * Token信息键
+     */
+    public static String TOKEN_WEB = "token";
 }
